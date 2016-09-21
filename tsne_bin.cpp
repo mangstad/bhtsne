@@ -5,7 +5,7 @@
 // Function that loads data from a t-SNE file
 // Note: this function does a malloc that should be freed elsewhere
 template<typename T>
-bool load_data(T** data, int* n, int* d, int* no_dims, T* theta, T* perplexity, int* rand_seed, char* infile) {
+bool load_data(T** data, int* n, int* d, int* no_dims, T* theta, T* perplexity, int* rand_seed, int* max_iter, char* infile) {
 
 	// Open file, read first 2 integers, allocate memory, and read the data
     FILE *h;
@@ -18,6 +18,7 @@ bool load_data(T** data, int* n, int* d, int* no_dims, T* theta, T* perplexity, 
     fread(theta, sizeof(T), 1, h);										// gradient accuracy
 	fread(perplexity, sizeof(T), 1, h);								// perplexity
 	fread(no_dims, sizeof(int), 1, h);                                      // output dimensionality
+	fread(max_iter, sizeof(int),1,h);
 	*data = (T*) malloc(*d * *n * sizeof(T));
     if(*data == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     fread(*data, sizeof(T), *n * *d, h);                               // the data
