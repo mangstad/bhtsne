@@ -42,7 +42,7 @@
 #include "sptree.h"
 #include "tsne.h"
 #include "sptree.cpp"
-
+#include <omp.h>
 
 using namespace std;
 
@@ -476,23 +476,28 @@ void TSNE<T, OUTDIM>::computeGaussianPerplexity(T* X, int N, int D, unsigned int
     unsigned int* row_P = *_row_P;
     unsigned int* col_P = *_col_P;
     T* val_P = *_val_P;
-    T* cur_P = (T*) malloc((N - 1) * sizeof(T));
-    if(cur_P == NULL) { printf("Memory allocation failed!\n"); exit(1); }
+
+    unsigned int num_threads = std::max(atoi(std::getenv("OMP_NUM_THREADS")), 1);
+
+    //T* cur_P = (T*) malloc((N - 1) * sizeof(T));
+    //if(cur_P == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     row_P[0] = 0;
     for(int n = 0; n < N; n++) row_P[n + 1] = row_P[n] + (unsigned int) K;
 
     // Build ball tree on data set
-    VpTree<DataPoint<T>, T, euclidean_distance>* tree = new VpTree<DataPoint<T>, T, euclidean_distance>();
+    VpTree<DataPoint<T>, T, euclidean_distance>* tree[num_threads];// = new VpTree<DataPoint<T>, T, euclidean_distance>();
+    for (int i=0;n<num_threads;i++) tree[i] = new VpTree<DataPoint<T>,T,euclidean_distance>();
     vector<DataPoint<T> > obj_X(N, DataPoint<T>(D, -1, X));
     for(int n = 0; n < N; n++) obj_X[n] = DataPoint<T>(D, n, X + n * D);
-    tree->create(obj_X);
+    for (int i=0;n<num_threads;i++) tree[i]->create(obj_X);
 
     // Loop over all points to find nearest neighbors
     if (verbose) {
         printf("Building tree...\n");
     }
-    vector<DataPoint<T> > indices;
-    vector<T> distances;
+    vector<DataPoint<T> > indices[N];
+    vector<T> distances[N];
+#pragma omp parallel for num_threads(num_threads)
     for(int n = 0; n < N; n++) {
 
         if (verbose) {
@@ -500,10 +505,17 @@ void TSNE<T, OUTDIM>::computeGaussianPerplexity(T* X, int N, int D, unsigned int
         }
 
         // Find nearest neighbors
-        indices.clear();
-        distances.clear();
-        tree->search(obj_X[n], K + 1, &indices, &distances);
+        indices[n].clear();
+        distances[n].clear();
+	int thread = omp_get_thread_num();
+        tree[thread]->search(obj_X[n], K + 1, &indices[n], &distances[n]);
+    }
 
+    #pragma omp parallel for
+    for (int n = 0; n<N; n++) {
+      T* cur_P = (T*) malloc((N-1)*sizeof(T));
+      if (cur_P==NULL) { printf("Memory allocation failed!\n");exit(1);}
+      
         // Initialize some variables for binary search
         bool found = false;
         T beta = 1.0;
@@ -516,13 +528,13 @@ void TSNE<T, OUTDIM>::computeGaussianPerplexity(T* X, int N, int D, unsigned int
         while(!found && iter < 200) {
 
             // Compute Gaussian kernel row
-            for(int m = 0; m < K; m++) cur_P[m] = exp(-beta * distances[m + 1] * distances[m + 1]);
+            for(int m = 0; m < K; m++) cur_P[m] = exp(-beta * distances[n][m + 1] * distances[n][m + 1]);
 
             // Compute entropy of current row
             sum_P = DBL_MIN;
             for(int m = 0; m < K; m++) sum_P += cur_P[m];
             T H = .0;
-            for(int m = 0; m < K; m++) H += beta * (distances[m + 1] * distances[m + 1] * cur_P[m]);
+            for(int m = 0; m < K; m++) H += beta * (distances[n][m + 1] * distances[n][m + 1] * cur_P[m]);
             H = (H / sum_P) + log(sum_P);
 
             // Evaluate whether the entropy is within the tolerance level
@@ -554,15 +566,15 @@ void TSNE<T, OUTDIM>::computeGaussianPerplexity(T* X, int N, int D, unsigned int
         // Row-normalize current row of P and store in matrix
         for(unsigned int m = 0; m < K; m++) cur_P[m] /= sum_P;
         for(unsigned int m = 0; m < K; m++) {
-            col_P[row_P[n] + m] = (unsigned int) indices[m + 1].index();
+            col_P[row_P[n] + m] = (unsigned int) indices[n][m + 1].index();
             val_P[row_P[n] + m] = cur_P[m];
         }
+	free(cur_P);
     }
 
     // Clean up memory
     obj_X.clear();
-    free(cur_P);
-    delete tree;
+    for (int i=0;i<num_threads;i++) delete tree[i];
 }
 
 
@@ -724,14 +736,14 @@ T randn() {
 
 
 template<typename T>
-int run_tSNE(T *inputData, T *outputData, int N, int in_dims, int out_dims, T theta, T perplexity, int rand_seed, bool verbose) {
+int run_tSNE(T *inputData, T *outputData, int N, int in_dims, int out_dims, T theta, T perplexity, int rand_seed, bool verbose, int max_iter) {
 
   if (out_dims == 2) {
-	  return TSNE<T, 2>::run(inputData, N, in_dims, outputData, perplexity, theta, rand_seed, false, verbose);
+    return TSNE<T, 2>::run(inputData, N, in_dims, outputData, perplexity, theta, rand_seed, false, verbose, max_iter);
   } else if (out_dims == 3) {
-    return TSNE<T, 3>::run(inputData, N, in_dims, outputData, perplexity, theta, rand_seed, false, verbose);
+    return TSNE<T, 3>::run(inputData, N, in_dims, outputData, perplexity, theta, rand_seed, false, verbose, max_iter);
   } else {
-    printf ("currently supports out_dims == 2 only");
+    printf ("currently supports out_dims == 2 or 3 only");
     return 2;
   }
 }
