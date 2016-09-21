@@ -486,10 +486,10 @@ void TSNE<T, OUTDIM>::computeGaussianPerplexity(T* X, int N, int D, unsigned int
 
     // Build ball tree on data set
     VpTree<DataPoint<T>, T, euclidean_distance>* tree[num_threads];// = new VpTree<DataPoint<T>, T, euclidean_distance>();
-    for (int i=0;n<num_threads;i++) tree[i] = new VpTree<DataPoint<T>,T,euclidean_distance>();
+    for (int i=0;i<num_threads;i++) tree[i] = new VpTree<DataPoint<T>,T,euclidean_distance>();
     vector<DataPoint<T> > obj_X(N, DataPoint<T>(D, -1, X));
     for(int n = 0; n < N; n++) obj_X[n] = DataPoint<T>(D, n, X + n * D);
-    for (int i=0;n<num_threads;i++) tree[i]->create(obj_X);
+    for (int i=0;i<num_threads;i++) tree[i]->create(obj_X);
 
     // Loop over all points to find nearest neighbors
     if (verbose) {
