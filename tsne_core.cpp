@@ -476,10 +476,10 @@ void TSNE<T, OUTDIM>::computeGaussianPerplexity(T* X, int N, int D, unsigned int
     unsigned int* row_P = *_row_P;
     unsigned int* col_P = *_col_P;
     T* val_P = *_val_P;
-    int ont = atoi(std::getenv("OMP_NUM_THREADS"));
-    if (ont==NULL) ont=1;
-    unsigned int num_threads = std::max(ont, 1);
-
+    unsigned int num_threads = 1;
+    char* ont = std::getenv("OMP_NUM_THREADS");
+    if (ont!=NULL) num_threads = std::max(atoi(ont),1);
+ 
     //T* cur_P = (T*) malloc((N - 1) * sizeof(T));
     //if(cur_P == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     row_P[0] = 0;
